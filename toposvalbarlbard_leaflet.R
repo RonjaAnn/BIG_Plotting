@@ -3,6 +3,7 @@ library(leaflet.extras)  # For additional map controls
 library(terra)
 library(rayshader)
 library(sf)
+library(magick)
 
 wd <- "/Users/ronja/Documents/EAGLE/Svalbard"
 setwd(wd)
@@ -46,34 +47,34 @@ leaflet() %>%
   )
 
 #----------- Section 2
+# Load the DEM
+dem <- rast("larissa_sos/DEM_Bjorndalen.tif")
+dem
+
+# Read Svalbard Orthomosaic into R
+orthomosaic_path <- "Data/Basemap/NP_Satellitt_Svalbard_Raster_25833/NP_Satellitt_Svalbard_Raster_25833.jp2"
+orthomosaic <- rast(orthomosaic_path)
+#crop orthomosaic to extent of bjorndalen
+orthomosaic_bjorndalen <- crop(orthomosaic, dem)
+
 # Step 1: Read the CSV file into R
 data <- vect("larissa_sos/BjorndalenReindeer_Points.gpkg")
 
-# Remove rows with missing values in utm_easting or utm_northing
-data_clean <- data %>%
-  filter(!is.na(utm_easting) & !is.na(utm_northing))
 
-# Step 2: Create an sf object with UTM coordinates (EPSG:25833)
-data_sf <- st_as_sf(data_clean, coords = c("utm_easting", "utm_northing"), crs = 25833)
-data_sp <- as(data_sf, "Spatial")
+# crop points to extent of dem
+data_cropped <- crop(data, dem)
 
-data_sf_cropped <- crop(data, dem)
 
-# Step 3: Reproject the coordinates to EPSG:3857 (Web Mercator)
-data_projected <- st_transform(data_sf, crs = 4326)
-z_values <- extract(dem, data_sf_cropped)
-data_sf_cropped$elevation <- z_values[, 2]
+# extract elevation values to points
+z_values <- extract(dem, data_cropped)
+data_cropped$elevation <- z_values[, 2]
 
 # Step 4: Extract the longitude and latitude (in EPSG:3857) as numeric vectors
-coords_x <- geom(data_sf_cropped)[, c("x")]
-coords_y <- geom(data_sf_cropped)[, c("y")]
+coords_x <- geom(data_cropped)[, c("x")]
+coords_y <- geom(data_cropped)[, c("y")]
 
-lng <- st_coordinates(data_sf_cropped)[, 1]
-lat <- st_coordinates(data_sf_cropped)[, 2]
-ele <- data_sf_cropped$elevation
+ele <- data_cropped$elevation
 
-coords_x <- as.numeric(unlist(coords_x))
-coords_y <- as.numeric(unlist(coords_y))
 z_values <- unlist(ele)
 
 length(coords_x)
@@ -81,16 +82,10 @@ length(coords_y)
 length(z_values)
 
 
-
-# Load the DEM
-dem <- rast("larissa_sos/DEM_Bjorndalen.tif")
-dem
-
 # Convert the cropped DEM to a matrix
 bjorndalen <- raster_to_matrix(dem)
 
-bjorndalen_shade <- sphere_shade(bjorndalen, texture = "desert")
-add_overlay(generate_contour_overlay(bjorndalen))
+bjorndalen_shade <- sphere_shade(bjorndalen, texture = "imhof1")
 plot_map(bjorndalen_shade)
 
 plot_3d(bjorndalen_shade, bjorndalen, zscale = 20, fov = 0, theta = 135, zoom = 0.75, phi = 45, windowsize = c(1000, 800))
@@ -107,3 +102,17 @@ render_points(lat = coords_y, long = coords_x,
 
 plot(data_sf_cropped, add = T)
 plot(dem)
+
+# ---------- Using the Orthophoto as overlay on 3d map
+
+# Step 4: Scale the orthophoto to match the DEM dimensions
+orthophoto_magick <- image_read("larissa_sos/Ortophoto_Bjorndalen.tif") %>%
+  image_resize(paste0(ncol(bjorndalen), "x", nrow(bjorndalen))) %>%
+  image_data()
+
+bjorndalen_shade <- rayshader::add_overlay(bjorndalen_shade, orthophoto_rgb)
+
+# plot 3d map with rgb overlay
+orthophoto_rgb <- drop(as.numeric(orthophoto_magick))
+plot_3d(bjorndalen_shade, bjorndalen, zscale = 10, fov = 60, theta = 45, phi = 45)
+
