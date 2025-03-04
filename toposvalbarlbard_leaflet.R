@@ -88,17 +88,18 @@ bjorndalen <- raster_to_matrix(dem)
 bjorndalen_shade <- sphere_shade(bjorndalen, texture = "imhof1")
 plot_map(bjorndalen_shade)
 
-plot_3d(bjorndalen_shade, bjorndalen, zscale = 20, fov = 0, theta = 135, zoom = 0.75, phi = 45, windowsize = c(1000, 800))
+plot_3d(bjorndalen_shade, bjorndalen, zscale = 10, fov = 0, theta = 135, zoom = 0.75, phi = 45, windowsize = c(1000, 800))
 
 
 
 # Step 3: Add 3D points without the 'extend' argument
-render_points(lat = coords_y, long = coords_x, 
-              altitude = z_values, zscale = 50, color = "pink",
+render_points(lat = coords_y, long = coords_x,
+              heightmap = bjorndalen,
+              zscale = 10, color = "brown",
               extent = ext(dem),
-              offset = 50,
+              offset = 2,
               clear_previous = T,
-              size = 10)
+              size = 5)
 
 plot(data_sf_cropped, add = T)
 plot(dem)
@@ -110,9 +111,10 @@ orthophoto_magick <- image_read("larissa_sos/Ortophoto_Bjorndalen.tif") %>%
   image_resize(paste0(ncol(bjorndalen), "x", nrow(bjorndalen))) %>%
   image_data()
 
-bjorndalen_shade <- rayshader::add_overlay(bjorndalen_shade, orthophoto_rgb)
+
 
 # plot 3d map with rgb overlay
 orthophoto_rgb <- drop(as.numeric(orthophoto_magick))
+bjorndalen_shade <- rayshader::add_overlay(bjorndalen_shade, orthophoto_rgb)
 plot_3d(bjorndalen_shade, bjorndalen, zscale = 10, fov = 60, theta = 45, phi = 45)
 

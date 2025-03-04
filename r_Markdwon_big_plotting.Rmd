@@ -28,6 +28,8 @@ library(ggplot2)    # For static maps
 library(leaflet)    # For interactive maps
 library(leaflet.extras)  # For additional map controls      # For handling spatial data
 library(dplyr)    # For data manipulation
+library(rayshader) # to create shiny 2d and 3d maps
+library(magick) # load images to add to shiny maps
 ```
 
 
@@ -102,3 +104,56 @@ for (i in 1:length(lng)) {
 # Output the updated map
 reindeer_map
 ```
+
+```{r create a basic 2d map and 3d map of Bjorndalen based on a DEM}
+#l load all needed datasets
+dem <- rast("/Users/ronja/Documents/EAGLE/Svalbard/larissa_sos/DEM_Bjorndalen.tif") # digital elevation model of bjorndalen (source: https://geodata.npolar.no/)
+
+# Convert the cropped DEM to a matrix necessary for use with raysahder
+bjorndalen <- raster_to_matrix(dem)
+
+# Calculate a color for each point on the surface
+bjorndalen_shade <- sphere_shade(bjorndalen, texture = "desert")
+plot_map(bjorndalen_shade)
+plot_3d(bjorndalen_shade, bjorndalen, zscale = 10, fov = 60, theta = 45, phi = 45)
+
+
+```
+
+```{r add a satellite picture published by the Norsk Polar Institute to the 3D map}
+#load datasets
+orthophoto <- image_read("/Users/ronja/Documents/EAGLE/Svalbard/larissa_sos/Ortophoto_Bjorndalen.tif") #load orthophoto of area (source: https://geodata.npolar.no/)
+
+orthophoto <- orthophoto %>%
+  image_resize(paste0(ncol(bjorndalen), "x", nrow(bjorndalen))) %>%
+  image_data()
+
+orthophoto_rgb <- drop(as.numeric(orthophoto))
+bjorndalen_shade <- rayshader::add_overlay(bjorndalen_shade, orthophoto_rgb)
+
+# plot 3d map with rgb overlay
+
+plot_3d(bjorndalen_shade, bjorndalen, zscale = 10, fov = 60, theta = 45, phi = 45)
+```
+
+``` {r Plot points}
+data_points <- vect("/Users/ronja/Documents/EAGLE/Svalbard/larissa_sos/BjorndalenReindeer_Points.gpkg")
+# crop points to extent of dem
+data_cropped <- crop(data_points, dem)
+
+# Extract the longitude and latitude (in EPSG:3857) as numeric vectors
+coords_x <- geom(data_cropped)[, c("x")]
+coords_y <- geom(data_cropped)[, c("y")]
+
+# Add 3D points without the 'extend' argument
+render_points(lat = coords_y, long = coords_x,
+              heightmap = bjorndalen,
+              zscale = 10, color = "brown",
+              extent = ext(dem),
+              offset = 2,
+              clear_previous = T,
+              size = 5)
+
+```
+
+
