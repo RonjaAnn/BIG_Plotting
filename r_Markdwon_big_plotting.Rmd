@@ -1,0 +1,104 @@
+---
+title: "Reindeer_RMarkdown"
+author: "Ronja Seitz"
+date: "2025-03-03"
+output: html_document
+
+params:
+  point_data:
+    label: "Input points:"
+    value: "C:/Users/ronja/Downloads/faeces_sampling_2023_2024_all_data_continuously_updated.csv"
+    input: file                # Default points file
+  year:
+    label: "Year"
+    value: 2017
+    input: slider
+    min: 2010
+    max: 2018
+    step: 1
+    sep: ""
+    
+---
+
+# **Load Required Libraries**
+```{r setup, message=FALSE, warning=FALSE}
+library(terra)      # For raster data
+library(sf)         # For vector data (points)
+library(ggplot2)    # For static maps
+library(leaflet)    # For interactive maps
+library(leaflet.extras)  # For additional map controls      # For handling spatial data
+library(dplyr)    # For data manipulation
+```
+
+
+
+```{r create leaflet map}
+# Define WMTS URLs
+svalbard_basemap_wmts <- "https://geodata.npolar.no/arcgis/rest/services/Basisdata/NP_Basiskart_Svalbard_WMTS_3857/MapServer/WMTS/tile/1.0.0/Basisdata_NP_Basiskart_Svalbard_WMTS_3857/default/default028mm/{z}/{y}/{x}.jpgpng"
+
+svalbard_satellite_wmts <- "https://geodata.npolar.no/arcgis/rest/services/Basisdata/NP_Satellitt_Svalbard_WMTS_3857/MapServer/WMTS/tile/1.0.0/Basisdata_NP_Satellitt_Svalbard_WMTS_3857/default/default028mm/{z}/{y}/{x}.jpgpng"
+
+# Create Leaflet map with multiple basemaps and overlays
+topo_map <- leaflet() %>%
+  setView(lng = 15, lat = 78, zoom = 5) %>%  # Center on Svalbard
+  
+  # Add basemap options
+  addProviderTiles(providers$Esri.WorldImagery, group = "Esri Satellite") %>%
+  addProviderTiles(providers$OpenStreetMap, group = "OpenStreetMap") %>%
+  addProviderTiles(providers$CartoDB.Positron, group = "CartoDB Light") %>%
+  
+  # Add the Svalbard Basemap WMTS layer
+  addWMSTiles(
+    baseUrl = svalbard_basemap_wmts,
+    layers = "Basisdata_NP_Basiskart_Svalbard_WMTS_3857",
+    options = WMSTileOptions(format = "image/jpgpng", transparent = TRUE),
+    group = "Svalbard Basemap"
+  ) %>%
+  
+  # Add the Svalbard Satellite WMTS layer
+  addWMSTiles(
+    baseUrl = svalbard_satellite_wmts,
+    layers = "Basisdata_NP_Satellitt_Svalbard_WMTS_3857",
+    options = WMSTileOptions(format = "image/jpgpng", transparent = TRUE),
+    group = "Svalbard Satellite"
+  ) %>%
+  
+  # Add layer control to switch between base layers and overlays
+  addLayersControl(
+    baseGroups = c("Esri Satellite", "OpenStreetMap", "CartoDB Light"),
+    overlayGroups = c("Svalbard Basemap", "Svalbard Satellite"),
+    options = layersControlOptions(collapsed = FALSE)
+  )
+
+topo_map
+
+```
+
+```{r add points}
+# Step 1: Read the CSV file into R
+data <- read.csv(params$point_data)
+
+# Remove rows with missing values in utm_easting or utm_northing
+data_clean <- data %>%
+  filter(!is.na(utm_easting) & !is.na(utm_northing))
+
+# Step 2: Create an sf object with UTM coordinates (EPSG:25833)
+data_sf <- st_as_sf(data_clean, coords = c("utm_easting", "utm_northing"), crs = 25833)
+
+# Step 3: Reproject the coordinates to EPSG:3857 (Web Mercator)
+data_projected <- st_transform(data_sf, crs = 4326)
+
+# Step 4: Extract the longitude and latitude (in EPSG:3857) as numeric vectors
+lng <- st_coordinates(data_projected)[, 1]
+lat <- st_coordinates(data_projected)[, 2]
+
+
+# Step 6: Add markers to the Leaflet map
+for (i in 1:length(lng)) {
+  reindeer_map <- topo_map %>%
+    addCircleMarkers(lng = lng[i], lat = lat[i], radius = 3, color = "white", fill = TRUE, fillColor = "grey", fillOpacity = 0.7, opacity = 1)
+}
+
+# Output the updated map
+reindeer_map
+```
