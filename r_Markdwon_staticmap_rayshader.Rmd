@@ -1,0 +1,63 @@
+---
+title: "r_Markdown_staticmap_rayshader"
+author: "Ronja Seitz"
+date: "2025-03-11"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(terra)
+library(rayshader)
+```
+
+```{r load data}
+# input data
+dem_path <- "C:/Users/ronja/Documents/EAGLE/Svalbard/Data/Basemap/NP_S0_DTM20/S0_DTM20.tif" #path to dem
+points_path <- "C:/Users/ronja/Documents/EAGLE/Svalbard/larissa_sos/faeces_sampling_2023_2024_all_data_continuously_updated.csv" #path to point data as csv
+
+# load input data
+dem_raster <- rast(dem_path) #read in dem using terra. Can be visualised with plot()
+points_df <- read.csv(points_path) #read the csv file as dataframe. To show data: print()
+``` 
+
+```{r create bounding box to crop data to (here coordinates of bjorndalen)}
+# Define UTM zone and bounding box (Example: UTM Zone 33N)
+utm_zone <- 33  # Change based on your location
+utm_crs <- paste0("+proj=utm +zone=", utm_zone, " +datum=WGS84 +units=m +no_defs")
+
+# Define bounding box for bjorndalen in UTM (Easting, Northing) 
+utm_bbox <- st_sfc(st_polygon(list(matrix(c(
+  505000 , 8676038,  # Bottom-left (E, N)
+  509000 , 8676038,  # Bottom-right (E, N)
+  509000 , 8684990,  # Top-right (E, N)
+  505000 , 8684990, # Top-left (E, N)
+  505000 , 8676038  #close polygon
+), ncol = 2, byrow = TRUE))), crs = utm_crs)
+```
+
+```{r}
+bjorndalen_dem <- crop(dem_raster, utm_bbox)
+#change type to dataframe because this is used in ggplot
+map_df <- as.data.frame(dem_bjorndalen, xy = T)
+#rename row names to make it more intuitive
+colnames(map_df) <- c("easting", "northing", "elev_m")
+
+# change type of points data to vector to be able to crop it to needed extent
+spatial_vector <- vect(points_df, geom = c("utm_easting", "utm_northing"), crs = "EPSG:25833")
+points_bjorndalen <- crop(spatial_vector, dem_bjorndalen)
+
+plot(points_bjorndalen)
+
+```
+
+```{r create a basic 2d map and 3d map of Bjorndalen based on a DEM}
+# Convert the cropped DEM to a matrix necessary for use with raysahder
+bjorndalen <- raster_to_matrix(dem)
+
+# Calculate a color for each point on the surface
+bjorndalen_shade <- sphere_shade(bjorndalen, texture = "desert")
+plot_map(bjorndalen_shade)
+
+
+```
